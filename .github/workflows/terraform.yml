@@ -26,11 +26,10 @@ on:
 
 env:
   AWS_REGION: ap-south-1
-  TF_DIR:     terraform-aws-ec2-minimal
 
 defaults:
   run:
-    working-directory: terraform-aws-ec2-minimal
+    working-directory: .
 
 jobs:
   # ── Runs automatically on every push ───────────────────────────────────────

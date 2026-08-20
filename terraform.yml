@@ -1,0 +1,110 @@
+# Place at repo root: .github/workflows/terraform.yml
+#
+# GitHub Secrets required (repo → Settings → Secrets → Actions):
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#
+# GitHub Variable required (Settings → Variables → Actions):
+#   TF_STATE_BUCKET  — S3 bucket name for remote state
+#
+# HOW TO USE:
+#   Push to main  → validate + plan run automatically
+#   Apply/Destroy → Actions tab → "Terraform EC2" → "Run workflow" → pick action
+
+name: Terraform EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:            # adds "Run workflow" button in Actions tab
+    inputs:
+      action:
+        description: 'Action to run'
+        type: choice
+        options: [apply, destroy]
+        required: true
+
+env:
+  AWS_REGION: ap-south-1
+  TF_DIR:     terraform-aws-ec2-minimal
+
+defaults:
+  run:
+    working-directory: terraform-aws-ec2-minimal
+
+jobs:
+  # ── Runs automatically on every push ───────────────────────────────────────
+  validate-plan:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=demo-ec2/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+
+      - run: terraform validate
+      - run: terraform plan
+
+  # ── Manual: Actions → "Run workflow" → choose apply ────────────────────────
+  apply:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=demo-ec2/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+
+      - run: terraform apply -auto-approve
+
+  # ── Manual: Actions → "Run workflow" → choose destroy ──────────────────────
+  destroy:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=demo-ec2/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+
+      - run: terraform destroy -auto-approve

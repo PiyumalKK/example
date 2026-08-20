@@ -1,0 +1,56 @@
+# Place this file at the repo root as .gitlab-ci.yml
+#
+# GitLab CI/CD Variables required (Settings → CI/CD → Variables):
+#   AWS_ACCESS_KEY_ID      — IAM access key
+#   AWS_SECRET_ACCESS_KEY  — IAM secret key
+
+image: hashicorp/terraform:latest
+
+variables:
+  TF_STATE_BUCKET: my-tf-state-bucket   # set this to your S3 bucket name
+  AWS_REGION: ap-south-1
+  TF_DIR: terraform-aws-ec2-minimal
+
+stages:
+  - validate
+  - plan
+  - apply
+  - destroy
+
+before_script:
+  - cd $TF_DIR
+  - terraform init -reconfigure
+      -backend-config="bucket=$TF_STATE_BUCKET"
+      -backend-config="key=demo-ec2/terraform.tfstate"
+      -backend-config="region=$AWS_REGION"
+
+# ── Runs automatically on every push ─────────────────────────────────────────
+
+validate:
+  stage: validate
+  script:
+    - terraform validate
+
+plan:
+  stage: plan
+  script:
+    - terraform plan -out=tfplan
+  artifacts:
+    paths: [terraform-aws-ec2-minimal/tfplan]
+    expire_in: 1 day
+
+# ── Manual jobs — click ▶ in GitLab pipeline UI ───────────────────────────────
+
+apply:
+  stage: apply
+  when: manual           # ▶ button appears after plan succeeds
+  needs: [plan]          # reuses the saved plan artifact
+  script:
+    - terraform apply tfplan
+
+destroy:
+  stage: destroy
+  when: manual           # ▶ button always available, independent of apply
+  needs: []              # does not wait for apply — can run anytime
+  script:
+    - terraform destroy -auto-approve
